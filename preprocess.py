@@ -74,17 +74,17 @@
 
 
 import csv
-#import nltk
+import nltk
 import numpy as np
 import regex as re
 import concurrent.futures
 import multiprocessing as mp
-#import gensim.downloader as api
+import gensim.downloader as api
 from nltk.corpus import wordnet
 from pymongo import MongoClient
-#from nltk.corpus import stopwords
+from nltk.corpus import stopwords
 from collections import defaultdict
-#from nltk.stem import WordNetLemmatizer
+from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, _preprocess
 
 
@@ -101,6 +101,7 @@ from headers import ID, NAME, DOMAIN, YEAR_FOUNDED, INDUSTRY, SIZE_RANGE, LOCALI
 
 nltk.download('punkt')
 nltk.download('wordnet')
+nltk.download('stopwords')
 nltk.download('averaged_perceptron_tagger')
 model = api.load('glove-wiki-gigaword-50')
 negatives = list(stopwords.words())
@@ -409,7 +410,7 @@ def create_vocabulary(out_file):
             f.write(str(val)+','+str(key)+'\n')
         f.close()
     # CREATE DENSE TRAINING EXAMPLE
-    for entry in client.data.norm.stemmed2.find():
+    for entry in client.data.norm.stemmed.find():
         features = [(vocabulary[a],b) for a,b in zip(entry['combined_grams'], entry['combined_freqs']) if a in vocabulary.keys()]
         dense_example = {
             'id': entry['id'],
@@ -417,9 +418,9 @@ def create_vocabulary(out_file):
             'features': features
         }
         if entry['id'] in train_set:
-            client.data.norm.train2.vectorized.insert_one(dense_example)
+            client.data.norm.train.vectorized.insert_one(dense_example)
         else:
-            client.data.norm.test2.vectorized.insert_one(dense_example)
+            client.data.norm.test.vectorized.insert_one(dense_example)
     client.close()
     print(dense_example)
 
@@ -459,16 +460,17 @@ def vectorize_unseen_data(vocab_src):
     #print(vocabulary)
     # CREATE DENSE TRAINING EXAMPLE
     for entry in client.data.norm.stemmed.find():
-        print(entry)
+        #print(entry)
         features = [(vocabulary[a],b) for a,b in zip(entry['combined_grams'], entry['combined_freqs']) if a in vocabulary.keys()]
         dense_example = {
             'id': entry['id'],
             'label': entry['label'],
             'features': features
         }
-        print(dense_example)
-        client.data.norm.unseen.vectorized.insert_one(dense_example)
-    #print(dense_example)
+        #print(dense_example)
+        if len(features) > MIN_FEATURES:
+            client.data.norm.unseen.vectorized.insert_one(dense_example)
+    print(dense_example)
     client.close()
 
 
