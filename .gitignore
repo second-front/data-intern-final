@@ -1,2 +1,5 @@
 
 sam_entities.json
+*.pyc
+*.bson
+*.json
