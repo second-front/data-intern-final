@@ -100,7 +100,6 @@ def find_site_map(links, data) -> list:
     return site_map_targets
 
 def fetch_html(data, base_url):
-    print('base_url:', base_url)
     error = ''
     if base_url == '': return None
     full_url = complete_url(base_url)
@@ -180,7 +179,7 @@ def work_unit(data, is_site_map):
 
 def execute_work(data):
     print('in execute_work...')
-    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
         future_to_url = {
             executor.submit(work_unit, obj, False): \
                 obj for obj in data
@@ -198,13 +197,13 @@ def load_sam_entities_data(num_enqueues, src_file):
                     entry['domain_agent_url'], '', entry['attribute_agent'], \
                         '', '', '', '', '', '']
                 data.append(row)
-                #if counter > num_enqueues: break
+                if counter > num_enqueues: break
     return data
 
-def webscrape():
-    data = load_sam_entities_data(num_enqueues=0, src_file='sam_entities.json')
+def webscrape(num_enqueues, src_file):
+    data = load_sam_entities_data(num_enqueues=num_enqueues, src_file=src_file)
     print(len(data))
     execute_work(data)
 
-if __name__ == '__main__':
-    webscrape()
+"""if __name__ == '__main__':
+    webscrape()"""

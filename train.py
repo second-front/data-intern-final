@@ -103,58 +103,11 @@ def plot_error(results_dict, output_path, show_plot):
     if show_plot==True:
         plt.show()
 
-def predict(model):
-    client = MongoClient(DB_CONNECTION)
-    validation_examples = []
-    validation_labels = []
-    with open("./vocabularies/vocabulary_100k_docfreq_100_hq.csv") as f:
-        for line in f: pass
-        last_line = line
-        last_id = last_line.split(',')[0]
-    max_id = int(last_id)
-    counter = 1
-    for example in client.data.norm.test.vectorized.find():
-        v = np.zeros((max_id+1,), dtype=float)
-        for id,val in example['features']: v[id] = val # X_j^(i)
-        v = np.divide(v,np.max(v))
-        validation_examples.append(csr_matrix(v))
-        validation_labels.append(int(example['label']))
-        counter += 1
-        print(counter)
-    X_test = sparse.vstack(validation_examples)
-    Y_test = np.asarray(validation_labels)
-    Y_pred = model.predict(X_test)
-    print(Y_pred)
-    print(Y_test)
-    accuracy = sum([1/len(Y_pred) * (round(i) == j) for i,j in zip(Y_pred,Y_test)])
-    print(accuracy)
-
-def predict_unseen(model):
-    client = MongoClient(DB_CONNECTION)
-    validation_examples = []
-    with open("./vocabularies/vocabulary_100k_docfreq_100_hq.csv") as f:
-        for line in f: pass
-        last_line = line
-        last_id = last_line.split(',')[0]
-    max_id = int(last_id)
-    counter = 1
-    for example in client.data.norm.test.vectorized.find():
-        v = np.zeros((max_id+1,), dtype=float)
-        for id,val in example['features']: v[id] = val # X_j^(i)
-        v = np.divide(v,np.max(v))
-        validation_examples.append(csr_matrix(v))
-        counter += 1
-        print(counter)
-    X_test = sparse.vstack(validation_examples)
-    Y_pred = model.predict(X_test)
-    print(Y_pred)
-
-if __name__ == '__main__':
+"""if __name__ == '__main__':
     #res = train_xgb_model(vocabulary_src='./vocabularies/vocabulary_100k_docfreq_100_hq.csv')
     loaded_model = pickle.load(open('pima.pickle.dat', "rb"))
-    print(loaded_model)
+    #print(loaded_model)
     res = loaded_model.evals_result()
     print(res)
-    plot_loss(res, output_path="log-loss-init.png", show_plot=True)
-    plot_error(res, output_path="error-init.png", show_plot=True)
-    predict(loaded_model)
+    #plot_loss(res, output_path="log-loss-init.png", show_plot=True)
+    #plot_error(res, output_path="error-init.png", show_plot=True)"""
