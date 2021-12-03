@@ -22,7 +22,7 @@ def train_xgb_model(vocabulary_src):
     validation_examples = []
     validation_labels = []
     counter = 0
-    for example in client.data.norm.train.vectorized.find():
+    for example in client.kyle.norm.train.vectorized.find():
         v = np.zeros((max_id+1,), dtype=float)
         for id,val in example['features']: v[id] = val # X_j^(i)
         v = np.divide(v,np.max(v))
@@ -35,7 +35,7 @@ def train_xgb_model(vocabulary_src):
     dtrain = xgb.DMatrix(X_train,label=Y_train)
     print('done querying train...')
     counter = 0
-    for example in client.data.norm.test.vectorized.find():
+    for example in client.kyle.norm.test.vectorized.find():
         v = np.zeros((max_id+1,), dtype=float)
         for id,val in example['features']: v[id] = val # X_j^(i)
         v = np.divide(v,np.max(v))

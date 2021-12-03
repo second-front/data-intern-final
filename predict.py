@@ -15,7 +15,7 @@ def predict(model):
         last_id = last_line.split(',')[0]
     max_id = int(last_id)
     counter = 1
-    for example in client.data.norm.test.vectorized.find():
+    for example in client.kyle.norm.test.vectorized.find():
         v = np.zeros((max_id+1,), dtype=float)
         for id,val in example['features']: v[id] = val # X_j^(i)
         v = np.divide(v,np.max(v))
@@ -41,11 +41,11 @@ def predict_unseen(model):
         last_id = last_line.split(',')[0]
     max_id = int(last_id)
     counter = 1
-    for example in client.data.norm.unseen.vectorized.find():
+    for example in client.kyle.norm.unseen.vectorized.find():
         v = np.zeros((max_id+1,), dtype=float)
         for id,val in example['features']: v[id] = val # X_j^(i)
         v = np.divide(v,np.max(v))
-        cmpny = client.data.companies.find_one({'id':example['id']})
+        cmpny = client.kyle.companies.find_one({'id':example['id']})
         if cmpny:
             validation_examples.append(csr_matrix(v))
             ids.append(tuple((example['id'],cmpny['name'])))

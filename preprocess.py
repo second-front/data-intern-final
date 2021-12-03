@@ -35,10 +35,10 @@ def create_training_example(tokens, metadata):
     try:
         link_vectorizer = CountVectorizer(ngram_range=(N_GRAM_LOWER_LIM,N_GRAM_UPPER_LIM))
         X1 = link_vectorizer.fit_transform([tokens[0]])
-        link_grams = link_vectorizer.get_feature_names()
+        link_grams = link_vectorizer.get_feature_names_out()
         doc_vectorizer = CountVectorizer(ngram_range=(N_GRAM_LOWER_LIM,N_GRAM_UPPER_LIM))
         X2 = doc_vectorizer.fit_transform([tokens[1]])
-        doc_grams = doc_vectorizer.get_feature_names()
+        doc_grams = doc_vectorizer.get_feature_names_out()
         training_example = {
             'id': metadata[1],
             'label': metadata[0],
@@ -50,17 +50,17 @@ def create_training_example(tokens, metadata):
         }
         client = MongoClient(DB_CONNECTION)
         if len(doc_grams) + len(link_grams) > MIN_FEATURES:
-            client.data.train.insert_one(training_example)
+            client.kyle.preprocess.insert_one(training_example)
         else:
             print('not enough tags, moving on...')
-            client.data.companies.delete_one({'id': metadata[1]})
-            client.data.sublinks.delete_many({'id': metadata[1]})
-            client.data.documents.delete_many({'id': metadata[1]})
+            client.kyle.companies.delete_one({'id': metadata[1]})
+            client.kyle.sublinks.delete_many({'id': metadata[1]})
+            client.kyle.documents.delete_many({'id': metadata[1]})
         return
     except ValueError:
         print('stop words only, moving on...')
     client = MongoClient(DB_CONNECTION)
-    client.data.companies.delete_one({'id':metadata[1]})
+    client.kyle.companies.delete_one({'id':metadata[1]})
 
 def tokenize(raw_links):
     links = str(raw_links).strip('][')
@@ -71,9 +71,7 @@ def tokenize(raw_links):
     pattern = re.compile('[^a-zA-z\s<>]+', re.UNICODE)
     text = re.sub(pattern, ' ', text)
     text = re.sub('\s+', ' ', text)
-    print('text pre: ', model.wv.vocab.keys())
-    text = ' '.join([x for x in nltk.word_tokenize(text) if (x not in negatives) and (x in model.wv.vocab.keys()) and (len(x) > 3 or x == '<' or x == '>')])
-    print('text post: ', text)
+    text = ' '.join([x for x in nltk.word_tokenize(text) if (x not in negatives) and (x in model.key_to_index) and (len(x) > 3 or x == '<' or x == '>')])
     text = text.replace(START_TOKEN, '[S]')
     text = text.replace(END_TOKEN, '[E]')
     text = text.replace('[S]' + ' ' + '[E]', '')
@@ -88,7 +86,6 @@ def preprocess(links_list, documents):
     return (hp_tokens, lp_tokens)
 
 def preprocessing_unit(links, documents, metadata):
-    print(metadata)
     tokens = preprocess(links, documents)
     create_training_example(tokens, metadata)
 
@@ -97,16 +94,16 @@ def load(entry, order_id, max_id, client):
     if order_id % 100 == 0: print(str(int(order_id/max_id*100))+'%')
     links = []
     documents = []
-    for link_list in client.data.sublinks.find({'id':entry['id']}):
+    for link_list in client.kyle.sublinks.find({'id':entry['id']}):
         links.append(link_list['links'])
-    for doc in client.data.documents.find({'id':entry['id']}):
+    for doc in client.kyle.documents.find({'id':entry['id']}):
         documents.append(doc['text'])
     return (links, documents, entry)
 
 def load_from_db():
     entry_list = []
     client = MongoClient(DB_CONNECTION)
-    for entry in client.data.companies.find():
+    for entry in client.kyle.companies.find():
         entry_list.append(entry)
     metadata = []
     links_list = []
@@ -126,11 +123,12 @@ def load_from_db():
 
 def submit_for_processing():
     links_list, documents_list, metadata = load_from_db()
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor() as executor:
         future_to_preprocess = {
             executor.submit(preprocessing_unit, obj[0], obj[1], obj[2]): \
                 obj for obj in zip(links_list, documents_list, metadata)
         }
+        executor.shutdown(wait=True)
 
 def pos_tagger(nltk_tag):
     if nltk_tag.startswith('J'): return wordnet.ADJ
@@ -148,15 +146,15 @@ def create_vocabulary(out_file):
     lemma = WordNetLemmatizer()
     document_freq = defaultdict(int)
     client = MongoClient(DB_CONNECTION)
-    entries = [entry['id'] for entry in client.data.train.find()]
+    entries = [entry['id'] for entry in client.kyle.train.find()]
     train_set = set(np.random.choice(entries, size=int(len(entries)*0.9), replace=False))
     print(len(train_set))
     max_id = len(entries)
     print(max_id)
     # CREATE LEMMATIZED TRAINING EXAMPLES & INSERT INTO DB.NORM.STEMMED COLLECTION
-    for order_id, entry in enumerate(client.data.train.find()):
+    for order_id, entry in enumerate(client.kyle.train.find()):
         if order_id % 100 == 0: print(str(int(order_id/max_id*100))+'%')
-        entry = client.data.train.find_one({'id':entry['id']})
+        entry = client.kyle.train.find_one({'id':entry['id']})
         doc_res = [n_gram.strip().split() for n_gram in entry['doc_grams']]
         link_res = [n_gram.strip().split() for n_gram in entry['link_grams']]
         # LEMMATIZE ACCORDING TO PART-OF-SPEECH ESTIMATE
@@ -172,7 +170,7 @@ def create_vocabulary(out_file):
             'combined_freqs': combined_freqs,
             'combined_grams': combined_grams
         }
-        client.data.norm.stemmed2.insert_one(document)
+        client.kyle.norm.stemmed2.insert_one(document)
         # DO NOT INCLUDE FEATURES EXTRACTED FROM VALIDATION SET EXAMPLES INTO VOCABULARY
         # VALIDATION SET NEEDS TO BE 'UNSEEN'
         if entry['id'] in train_set:
@@ -188,7 +186,7 @@ def create_vocabulary(out_file):
             f.write(str(val)+','+str(key)+'\n')
         f.close()
     # CREATE DENSE TRAINING EXAMPLE
-    for entry in client.data.norm.stemmed.find():
+    for entry in client.kyle.norm.stemmed.find():
         features = [(vocabulary[a],b) for a,b in zip(entry['combined_grams'], entry['combined_freqs']) if a in vocabulary.keys()]
         dense_example = {
             'id': entry['id'],
@@ -196,9 +194,9 @@ def create_vocabulary(out_file):
             'features': features
         }
         if entry['id'] in train_set:
-            client.data.norm.train.vectorized.insert_one(dense_example)
+            client.kyle.norm.train.vectorized.insert_one(dense_example)
         else:
-            client.data.norm.test.vectorized.insert_one(dense_example)
+            client.kyle.norm.test.vectorized.insert_one(dense_example)
     client.close()
     print(dense_example)
 
@@ -206,11 +204,11 @@ def vectorize_unseen_data(vocab_src):
     vocabulary = {}
     lemma = WordNetLemmatizer()
     client = MongoClient(DB_CONNECTION)
-    entries = [entry['id'] for entry in client.data.train.find()]
+    entries = [entry['id'] for entry in client.kyle.train.find()]
     max_id = len(entries)
-    for order_id, entry in enumerate(client.data.train.find()):
+    for order_id, entry in enumerate(client.kyle.train.find()):
         if order_id % 100 == 0: print(str(int(order_id/max_id*100))+'%')
-        entry = client.data.train.find_one({'id':entry['id']})
+        entry = client.kyle.train.find_one({'id':entry['id']})
         doc_res = [n_gram.strip().split() for n_gram in entry['doc_grams']]
         link_res = [n_gram.strip().split() for n_gram in entry['link_grams']]
         # LEMMATIZE ACCORDING TO PART-OF-SPEECH ESTIMATE
@@ -226,14 +224,14 @@ def vectorize_unseen_data(vocab_src):
             'combined_freqs': combined_freqs,
             'combined_grams': combined_grams
         }
-        client.data.norm.stemmed.insert_one(document)
+        client.kyle.norm.stemmed.insert_one(document)
     with open(vocab_src) as csvfile:
         reader = csv.reader(csvfile, delimiter=',')
         for r in reader:
             vocabulary[r[1]] = int(r[0])
     #print(vocabulary)
     # CREATE DENSE TRAINING EXAMPLE
-    for entry in client.data.norm.stemmed.find():
+    for entry in client.kyle.norm.stemmed.find():
         #print(entry)
         features = [(vocabulary[a],b) for a,b in zip(entry['combined_grams'], entry['combined_freqs']) if a in vocabulary.keys()]
         dense_example = {
@@ -243,7 +241,7 @@ def vectorize_unseen_data(vocab_src):
         }
         #print(dense_example)
         if len(features) > MIN_FEATURES:
-            client.data.norm.unseen.vectorized.insert_one(dense_example)
+            client.kyle.norm.unseen.vectorized.insert_one(dense_example)
     print(dense_example)
     client.close()
 

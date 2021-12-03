@@ -50,7 +50,7 @@ def find_about_pages(links, data):
         'links': str(href_list),
     }
     client = MongoClient(DB_CONNECTION)
-    client.data.sublinks.insert_one(entry)
+    client.kyle.sublinks.insert_one(entry)
     client.close()
 
     selected_urls = None
@@ -68,6 +68,7 @@ def find_about_pages(links, data):
             executor.submit(fetch_html, data, url_match(data, link)): \
                 link for link in selected_urls
         }
+        executor.shutdown(wait=True)
 
 def extract_text(tags):
     texts = []
@@ -123,7 +124,7 @@ def fetch_html(data, base_url):
                 'text': text
             }
             client = MongoClient(DB_CONNECTION)
-            if not client.data.companies.find_one({'id': data[h.ID]}):
+            if not client.kyle.companies.find_one({'id': data[h.ID]}):
                 company = {
                     'id': data[h.ID],
                     'name': data[h.NAME],
@@ -136,8 +137,8 @@ def fetch_html(data, base_url):
                     'linked_in_url': data[h.LINKEDIN_URL],
                     'relevant': data[-1]
                 }
-                client.data.companies.insert_one(company)
-            client.data.documents.insert_one(document)
+                client.kyle.companies.insert_one(company)
+            client.kyle.documents.insert_one(document)
             client.close()
         return soup
     except requests.exceptions.Timeout:
@@ -155,7 +156,7 @@ def fetch_html(data, base_url):
         'time': datetime.datetime.now(),
         'error': error
     }
-    client.data.failures.insert_one(failure)
+    client.kyle.failures.insert_one(failure)
     return None
 
 def work_unit(data, is_site_map):
@@ -179,11 +180,12 @@ def work_unit(data, is_site_map):
 
 def execute_work(data):
     print('in execute_work...')
-    with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
         future_to_url = {
             executor.submit(work_unit, obj, False): \
                 obj for obj in data
         }
+        executor.shutdown(wait=True)
 
 def load_sam_entities_data(num_enqueues, src_file):
     data = []
